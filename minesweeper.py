@@ -14,11 +14,11 @@ class MinesweeperApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Minesweeper")
-        self.resizable(False, False)
+        self.resizable(True, True)
         self.minsize(400, 400)
 
         self.board_frame = tk.Frame(self)
-        self.board_frame.pack(padx=10, pady=10)
+        self.board_frame.pack(padx=10, pady=10, expand=True, fill=tk.BOTH)
 
         self.status_frame = tk.Frame(self)
         self.status_frame.pack(pady=(0, 10))
@@ -107,6 +107,12 @@ class MinesweeperApp(tk.Tk):
         self.flags = set()
         self.game_over = False
         self.mines_label.config(text=f"Mines: {self.mines}")
+        cell_size = 30
+
+        for r in range(self.rows):
+            self.board_frame.grid_rowconfigure(r, weight=1, minsize=cell_size)
+        for c in range(self.cols):
+            self.board_frame.grid_columnconfigure(c, weight=1, minsize=cell_size)
 
         for r in range(self.rows):
             row_buttons = []
@@ -119,7 +125,7 @@ class MinesweeperApp(tk.Tk):
                     command=lambda r=r, c=c: self.reveal_cell(r, c),
                 )
                 btn.bind("<Button-3>", lambda event, r=r, c=c: self.toggle_flag(r, c))
-                btn.grid(row=r, column=c)
+                btn.grid(row=r, column=c, sticky="nsew")
                 row_buttons.append(btn)
             self.buttons.append(row_buttons)
 
