@@ -46,6 +46,8 @@ class MinesweeperApp(tk.Tk):
         self.canvas.bind("<Button-1>", self.handle_left_click)
         self.canvas.bind("<Button-3>", self.handle_right_click)
         self.canvas.bind("<Configure>", self.on_canvas_resize)
+        self.bind("c", self.toggle_controls)
+        self.bind("C", self.toggle_controls)
 
         self.rows = 0
         self.cols = 0
@@ -59,6 +61,7 @@ class MinesweeperApp(tk.Tk):
         self.timer_id = None
         self.cell_size = 30
         self.trigger_mine = None
+        self.controls_visible = True
 
         self.change_mode(self.mode_var.get())
 
@@ -138,8 +141,16 @@ class MinesweeperApp(tk.Tk):
         if self.rows == 0 or self.cols == 0:
             return
         size = min(event.width / self.cols, event.height / self.rows)
-        self.cell_size = max(18, int(size))
+        self.cell_size = max(1, int(size))
         self.draw_board()
+
+    def toggle_controls(self, _event=None):
+        if self.controls_visible:
+            self.status_frame.pack_forget()
+            self.controls_visible = False
+        else:
+            self.status_frame.pack(pady=(10, 5))
+            self.controls_visible = True
 
     def handle_left_click(self, event):
         cell = self.get_cell_from_xy(event.x, event.y)
@@ -195,7 +206,7 @@ class MinesweeperApp(tk.Tk):
             if (r, c) in self.revealed:
                 continue
             self.revealed.add((r, c))
-        adjacent = self.count_adjacent_mines(r, c)
+            adjacent = self.count_adjacent_mines(r, c)
             if adjacent == 0:
                 for nr, nc in self.get_neighbors(r, c):
                     if (nr, nc) not in self.revealed and (nr, nc) not in self.flags:
