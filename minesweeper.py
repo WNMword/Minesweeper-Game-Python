@@ -17,11 +17,8 @@ class MinesweeperApp(tk.Tk):
         self.resizable(True, True)
         self.minsize(400, 400)
 
-        self.board_frame = tk.Frame(self)
-        self.board_frame.pack(padx=10, pady=10, expand=True, fill=tk.BOTH)
-
         self.status_frame = tk.Frame(self)
-        self.status_frame.pack(pady=(0, 10))
+        self.status_frame.pack(pady=(10, 5))
 
         self.mines_label = tk.Label(self.status_frame, text="Mines: 0")
         self.mines_label.pack(side=tk.LEFT, padx=10)
@@ -41,10 +38,18 @@ class MinesweeperApp(tk.Tk):
         )
         self.mode_menu.pack(side=tk.LEFT)
 
+        self.board_frame = tk.Frame(self)
+        self.board_frame.pack(padx=10, pady=(0, 10), expand=True, fill=tk.BOTH)
+
+        self.canvas = tk.Canvas(self.board_frame, highlightthickness=0)
+        self.canvas.pack(expand=True, fill=tk.BOTH)
+        self.canvas.bind("<Button-1>", self.handle_left_click)
+        self.canvas.bind("<Button-3>", self.handle_right_click)
+        self.canvas.bind("<Configure>", self.on_canvas_resize)
+
         self.rows = 0
         self.cols = 0
         self.mines = 0
-        self.buttons = []
         self.mine_positions = set()
         self.revealed = set()
         self.flags = set()
@@ -52,6 +57,8 @@ class MinesweeperApp(tk.Tk):
         self.timer_running = False
         self.elapsed = 0
         self.timer_id = None
+        self.cell_size = 30
+        self.trigger_mine = None
 
         self.change_mode(self.mode_var.get())
 
@@ -98,38 +105,16 @@ class MinesweeperApp(tk.Tk):
         self.timer_running = False
         self.timer_label.config(text="Time: 0")
 
-        for widget in self.board_frame.winfo_children():
-            widget.destroy()
-
-        self.buttons = []
         self.mine_positions = set()
         self.revealed = set()
         self.flags = set()
         self.game_over = False
+        self.trigger_mine = None
         self.mines_label.config(text=f"Mines: {self.mines}")
-        cell_size = 30
-
-        for r in range(self.rows):
-            self.board_frame.grid_rowconfigure(r, weight=1, minsize=cell_size)
-        for c in range(self.cols):
-            self.board_frame.grid_columnconfigure(c, weight=1, minsize=cell_size)
-
-        for r in range(self.rows):
-            row_buttons = []
-            for c in range(self.cols):
-                btn = tk.Button(
-                    self.board_frame,
-                    width=2,
-                    height=1,
-                    text="",
-                    command=lambda r=r, c=c: self.reveal_cell(r, c),
-                )
-                btn.bind("<Button-3>", lambda event, r=r, c=c: self.toggle_flag(r, c))
-                btn.grid(row=r, column=c, sticky="nsew")
-                row_buttons.append(btn)
-            self.buttons.append(row_buttons)
+        self.cell_size = 30
 
         self.place_mines()
+        self.draw_board()
 
     def place_mines(self):
         self.mine_positions = set()
@@ -149,18 +134,43 @@ class MinesweeperApp(tk.Tk):
             self.timer_label.config(text=f"Time: {self.elapsed}")
             self.timer_id = self.after(1000, self.update_timer)
 
+    def on_canvas_resize(self, event):
+        if self.rows == 0 or self.cols == 0:
+            return
+        size = min(event.width / self.cols, event.height / self.rows)
+        self.cell_size = max(18, int(size))
+        self.draw_board()
+
+    def handle_left_click(self, event):
+        cell = self.get_cell_from_xy(event.x, event.y)
+        if cell:
+            self.reveal_cell(*cell)
+
+    def handle_right_click(self, event):
+        cell = self.get_cell_from_xy(event.x, event.y)
+        if cell:
+            self.toggle_flag(*cell)
+
+    def get_cell_from_xy(self, x, y):
+        if self.cell_size <= 0:
+            return None
+        row = int(y // self.cell_size)
+        col = int(x // self.cell_size)
+        if 0 <= row < self.rows and 0 <= col < self.cols:
+            return row, col
+        return None
+
     def toggle_flag(self, row, col):
         if self.game_over or (row, col) in self.revealed:
             return
         self.start_timer()
         if (row, col) in self.flags:
             self.flags.remove((row, col))
-            self.buttons[row][col].config(text="")
         else:
             self.flags.add((row, col))
-            self.buttons[row][col].config(text="🚩")
         remaining = self.mines - len(self.flags)
         self.mines_label.config(text=f"Mines: {remaining}")
+        self.draw_board()
         self.check_win()
 
     def reveal_cell(self, row, col):
@@ -169,11 +179,13 @@ class MinesweeperApp(tk.Tk):
         self.start_timer()
         if (row, col) in self.mine_positions:
             self.game_over = True
-            self.show_mines(trigger=(row, col))
+            self.trigger_mine = (row, col)
+            self.draw_board()
             messagebox.showerror("Game Over", "Boom! You hit a mine.")
             return
 
         self.flood_reveal(row, col)
+        self.draw_board()
         self.check_win()
 
     def flood_reveal(self, row, col):
@@ -183,11 +195,8 @@ class MinesweeperApp(tk.Tk):
             if (r, c) in self.revealed:
                 continue
             self.revealed.add((r, c))
-            self.buttons[r][c].config(relief=tk.SUNKEN, state=tk.DISABLED)
-            adjacent = self.count_adjacent_mines(r, c)
-            if adjacent > 0:
-                self.buttons[r][c].config(text=str(adjacent))
-            else:
+        adjacent = self.count_adjacent_mines(r, c)
+            if adjacent == 0:
                 for nr, nc in self.get_neighbors(r, c):
                     if (nr, nc) not in self.revealed and (nr, nc) not in self.flags:
                         stack.append((nr, nc))
@@ -204,15 +213,59 @@ class MinesweeperApp(tk.Tk):
                 if 0 <= nr < self.rows and 0 <= nc < self.cols:
                     yield nr, nc
 
-    def show_mines(self, trigger=None):
-        for r, c in self.mine_positions:
-            if (r, c) == trigger:
-                self.buttons[r][c].config(text="💥", bg="#ff6b6b")
-            else:
-                self.buttons[r][c].config(text="💣")
+    def draw_board(self):
+        self.canvas.delete("all")
+        if self.rows == 0 or self.cols == 0:
+            return
+        font_size = max(10, int(self.cell_size * 0.45))
+        font = ("Arial", font_size, "bold")
+
         for r in range(self.rows):
             for c in range(self.cols):
-                self.buttons[r][c].config(state=tk.DISABLED)
+                x1 = c * self.cell_size
+                y1 = r * self.cell_size
+                x2 = x1 + self.cell_size
+                y2 = y1 + self.cell_size
+
+                if (r, c) in self.revealed:
+                    fill_color = "#e0e0e0"
+                else:
+                    fill_color = "#f5f5f5"
+
+                if self.game_over and (r, c) in self.mine_positions:
+                    if (r, c) == self.trigger_mine:
+                        fill_color = "#ff6b6b"
+                    else:
+                        fill_color = "#d9d9d9"
+
+                self.canvas.create_rectangle(
+                    x1, y1, x2, y2, fill=fill_color, outline="#8c8c8c"
+                )
+
+                if (r, c) in self.revealed:
+                    adjacent = self.count_adjacent_mines(r, c)
+                    if adjacent > 0:
+                        self.canvas.create_text(
+                            (x1 + x2) / 2,
+                            (y1 + y2) / 2,
+                            text=str(adjacent),
+                            font=font,
+                            fill="#2f4f4f",
+                        )
+                elif (r, c) in self.flags:
+                    self.canvas.create_text(
+                        (x1 + x2) / 2,
+                        (y1 + y2) / 2,
+                        text="🚩",
+                        font=font,
+                    )
+                elif self.game_over and (r, c) in self.mine_positions:
+                    self.canvas.create_text(
+                        (x1 + x2) / 2,
+                        (y1 + y2) / 2,
+                        text="💣",
+                        font=font,
+                    )
 
     def check_win(self):
         if self.game_over:
@@ -221,6 +274,7 @@ class MinesweeperApp(tk.Tk):
         if len(self.revealed) == total_cells - self.mines:
             self.game_over = True
             self.timer_running = False
+            self.draw_board()
             messagebox.showinfo("You Win!", "Congratulations, you cleared the board!")
 
 
