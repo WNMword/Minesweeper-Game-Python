@@ -195,7 +195,7 @@ class MinesweeperApp(tk.Tk):
             if (r, c) in self.revealed:
                 continue
             self.revealed.add((r, c))
-            adjacent = self.count_adjacent_mines(r, c)
+        adjacent = self.count_adjacent_mines(r, c)
             if adjacent == 0:
                 for nr, nc in self.get_neighbors(r, c):
                     if (nr, nc) not in self.revealed and (nr, nc) not in self.flags:
